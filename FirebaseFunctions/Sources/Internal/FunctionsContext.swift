@@ -37,13 +37,15 @@ struct FunctionsContextProvider: Sendable {
   }
 
   func context(options: HTTPSCallableOptions?) async throws -> FunctionsContext {
-    async let authToken = auth?.getToken(forcingRefresh: false)
-    async let appCheckToken = getAppCheckToken(options: options)
-    async let limitedUseAppCheckToken = getLimitedUseAppCheckToken(options: options)
+    // Sequential awaits instead of async let to work around a Swift 6.3 compiler
+    // bug (swiftlang/swift#87481) where the optimizer generates incorrect async let
+    // teardown code in release builds, causing a crash in
+    // asyncLet_finish_after_task_completion.
+    let authToken = try await auth?.getToken(forcingRefresh: false)
+    let appCheckToken = await getAppCheckToken(options: options)
+    let limitedUseAppCheckToken = await getLimitedUseAppCheckToken(options: options)
 
-    // Only `authToken` is throwing, but the formatter script removes the `try`
-    // from `try authToken` and puts it in front of the initializer call.
-    return try await FunctionsContext(
+    return FunctionsContext(
       authToken: authToken,
       fcmToken: messaging?.fcmToken,
       appCheckToken: appCheckToken,
