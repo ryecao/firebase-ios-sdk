@@ -64,9 +64,12 @@ final class AuthBackend: AuthBackendProtocol {
                       httpMethod: String,
                       contentType: String,
                       requestConfiguration: AuthRequestConfiguration) async -> URLRequest {
-    // Kick off tasks for the async header values.
-    async let heartbeatsHeaderValue = requestConfiguration.heartbeatLogger?.asyncHeaderValue()
-    async let appCheckTokenHeaderValue = requestConfiguration.appCheck?
+    // Sequential awaits instead of async let to work around a Swift 6.3 compiler
+    // bug (swiftlang/swift#87481) where the optimizer generates incorrect async let
+    // teardown code in release builds, causing a crash in
+    // asyncLet_finish_after_task_completion.
+    let heartbeatsHeaderValue = await requestConfiguration.heartbeatLogger?.asyncHeaderValue()
+    let appCheckTokenHeaderValue = await requestConfiguration.appCheck?
       .getToken(forcingRefresh: false)
 
     var request = URLRequest(url: url)
@@ -85,9 +88,8 @@ final class AuthBackend: AuthBackendProtocol {
        languageCode.count > 0 {
       request.setValue(languageCode, forHTTPHeaderField: "X-Firebase-Locale")
     }
-    // Wait for the async header values.
-    await request.setValue(heartbeatsHeaderValue, forHTTPHeaderField: "X-Firebase-Client")
-    if let tokenResult = await appCheckTokenHeaderValue {
+    request.setValue(heartbeatsHeaderValue, forHTTPHeaderField: "X-Firebase-Client")
+    if let tokenResult = appCheckTokenHeaderValue {
       if let error = tokenResult.error {
         AuthLog.logWarning(code: "I-AUT000018",
                            message: "Error getting App Check token; using placeholder " +
